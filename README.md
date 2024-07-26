@@ -20,3 +20,42 @@ Add the Google Drive API NuGet package to your project:
 
 ```bash
 dotnet add package Google.Apis.Drive.v3
+
+## Example Code
+
+### Creating an Instance of GoogleDriveApi
+
+First, create an instance of the `GoogleDriveApi` class using the fluent builder pattern with your credentials and token paths:
+
+```csharp
+GoogleDriveApi driveApi = await GoogleDriveApi.CreateBuilder()
+	.SetCredentialsPath("credentials.json")
+	.SetTokenFolderPath("_metadata")
+	.SetApplicationName("[Your App Name]")
+	.BuildAsync();
+```
+
+## Class Documentation
+
+### GoogleDriveApi
+
+A class for interacting with the Google Drive API.
+
+- `credentialsPath`: Path to the credentials JSON file.
+- `tokenPath`: Path to the token JSON file.
+- `applicationName`: The name of the application.
+
+#### Methods
+
+- `GoogleDriveApiBuilder SetCredentialsPath(string path)`: Sets the path to the credentials JSON file. [Documentation](https://developers.google.com/identity/protocols/oauth2)
+- `GoogleDriveApiBuilder SetTokenPath(string path)`: Sets the path to the token JSON file. [Documentation](https://developers.google.com/api-client-library/dotnet/guide/aaa_oauth)
+- `GoogleDriveApiBuilder SetApplicationName(string name)`: Sets the name of the application. [Documentation](https://developers.google.com/drive/api/v3/about-auth)
+- `Task<GoogleDriveApi> BuildAsync()`: Builds and authorizes the GoogleDriveApi instance asynchronously. [Documentation](https://developers.google.com/identity/protocols/oauth2)
+- `Task<string> CreateFolderAsync(string folderName, string parentFolderId = "root")`: Creates a folder in Google Drive asynchronously. [Documentation](https://developers.google.com/drive/api/v3/folder)
+- `Task<bool> IsTokenExpiredAsync()`: Checks if the access token is expired asynchronously. [Documentation](https://developers.google.com/identity/protocols/oauth2)
+- `Task RefreshTokenAsync()`: Refreshes the access token if it is expired asynchronously. [Documentation](https://developers.google.com/identity/protocols/oauth2)
+
+## Acknowledgements
+
+- [Google Drive API](https://developers.google.com/drive)
+- [Google API .NET Client Library](https://github.com/googleapis/google-api-dotnet-client)

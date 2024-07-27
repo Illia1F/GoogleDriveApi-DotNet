@@ -6,11 +6,14 @@ This C# library simplifies interaction with the Google Drive API. While it doesn
 
 - Extract folder ID from a Google Drive folder URL.
 - Get the folder name by its ID.
-- Generate Google Drive folder URL by its path.
-- Obtain the full path of a folder starting from the root using its ID.
+- Generate Google Drive folder URL by its id.
+- Obtain the full path of a folder starting from the root using its ID. (Very slowly)
 - Create folders in Google Drive.
 - Check if the access token is expired.
 - Refresh the access token if expired.
+- Download files from Google Drive.
+- Upload files to Google Drive. (Not yet)
+- Delete files and folders in Google Drive. (Not yet)
 
 > **Note:** This library is not a full reflection of the real Google Drive API but implements the most commonly used API endpoints to simplify interaction with Google Drive.
 
@@ -51,9 +54,14 @@ dotnet add package Google.Apis.Drive.v3
    - Add scopes if needed (usually, you can proceed with the default scope).
    - Click `Save and Continue` until the configuration is complete.
 4. On the `Create OAuth client ID` page:
-   - Select `Desktop app` as the application type.
+   - Select `Desktop app` or `Web app` as the application type.
    - Click `Create`.
-   - Download the JSON file and save it as `credentials.json` in your project directory.
+   - Download the JSON file containing your credentials.
+
+### Setting Up Your Application
+
+1. Place the downloaded `credentials.json` file in your project directory.
+2. Initialize the `GoogleDriveApi` class with your credentials.
 
 ## Example Code
 
@@ -62,32 +70,54 @@ dotnet add package Google.Apis.Drive.v3
 First, create an instance of the `GoogleDriveApi` class using the fluent builder pattern with your credentials and token paths:
 
 ```csharp
-GoogleDriveApi driveApi = await GoogleDriveApi.CreateBuilder()
+GoogleDriveApi gDriveApi = await GoogleDriveApi.CreateBuilder()
 	.SetCredentialsPath("credentials.json")
 	.SetTokenFolderPath("_metadata")
 	.SetApplicationName("[Your App Name]")
 	.BuildAsync();
-
-string newFolderId = driveApi.CreateFolder("NewFolderName");
-Console.WriteLine("New Folder ID: " + newFolderId);
 ```
 
-## Class Documentation
+### Creating folders
 
-### GoogleDriveApi
+Create a new folder named "NewFolderName" in the root directory and then another folder named "NewFolderNameV2" inside the first folder.
 
-A class for interacting with the Google Drive API.
+```csharp
+string newFolderId = gDriveApi.CreateFolder(folderName: "NewFolderName");
 
-#### Methods
+string newFolderId2 = gDriveApi.CreateFolder(folderName: "NewFolderNameV2", parentFolderId: newFolderId);
 
-- `GoogleDriveApiBuilder SetCredentialsPath(string path)`: Sets the path to the credentials JSON file. [Documentation](https://developers.google.com/identity/protocols/oauth2)
-- `GoogleDriveApiBuilder SetTokenFolderPath(string path)`: Sets the path to the token JSON file. [Documentation](https://developers.google.com/api-client-library/dotnet/guide/aaa_oauth)
-- `GoogleDriveApiBuilder SetApplicationName(string name)`: Sets the name of the application. [Documentation](https://cloud.google.com/dotnet/docs/reference/Google.Apis/latest/Google.Apis.Services.BaseClientService.Initializer#Google_Apis_Services_BaseClientService_Initializer_ApplicationName)
-- `Task<GoogleDriveApi> BuildAsync()`: Builds and authorizes the GoogleDriveApi instance asynchronously. [Documentation](https://cloud.google.com/dotnet/docs/reference/Google.Apis/latest/Google.Apis.Auth.OAuth2.GoogleWebAuthorizationBroker?hl=en#Google_Apis_Auth_OAuth2_GoogleWebAuthorizationBroker_AuthorizeAsync_Google_Apis_Auth_OAuth2_ClientSecrets_System_Collections_Generic_IEnumerable_System_String__System_String_System_Threading_CancellationToken_Google_Apis_Util_Store_IDataStore_Google_Apis_Auth_OAuth2_ICodeReceiver_)
-- `void TryRefreshToken()`: Refreshes the token if it is stale. [Documentation](https://cloud.google.com/dotnet/docs/reference/Google.Apis/latest/Google.Apis.Auth.OAuth2.UserCredential?hl=en#Google_Apis_Auth_OAuth2_UserCredential_RefreshTokenAsync_System_Threading_CancellationToken_)
-- `string? GetFolderIdByPath(string path)`: Gets the folder ID by its path.
-- `string? GetFolderId(string folderName, string parentId)`: Gets the folder ID by its name and parent ID.
-- `string CreateFolder(string folderName, string parentFolderId = "root")`: Creates a folder in Google Drive.
+Console.WriteLine("New Folder ID: " + newFolderId);
+Console.WriteLine("New Folder ID2: " + newFolderId2);
+```
+
+### Retrieving a list of folders in the root directory
+
+Retrieve and print all folders in the root directory and their children.
+
+```csharp
+// Retrieves a list of folders in the root directory
+var folders = gDriveApi.GetFoldersBy(parentFolderId: "root");
+
+for (int i = 0; i < folders.Count; i++)
+{
+   var folder = folders[i];
+
+   Console.WriteLine($"{i + 1}. [{folder.name}] with ID({folder.id})");
+
+   // Retrieves a list of subfolders within the current folder
+   var subFolders = gDriveApi.GetFoldersBy(folder.id);
+   for (int j = 0; j < subFolders.Count; j++)
+   {
+      var subFolder = subFolders[j];
+
+      Console.WriteLine($"---|{j + 1}. [{subFolder.name}] with ID({subFolder.id})");
+   }
+}
+```
+
+## License
+
+This project is licensed under the MIT License.
 
 ## Acknowledgements
 

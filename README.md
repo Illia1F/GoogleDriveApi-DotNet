@@ -77,7 +77,7 @@ GoogleDriveApi gDriveApi = await GoogleDriveApi.CreateBuilder()
 	.BuildAsync();
 ```
 
-Additional sample code snippets are available in the [Sample Code Snippets file](https://console.cloud.google.com/).
+Additional sample code snippets are available in the [Sample Code Snippets file](DOCS/SampleCodeSnippets.md).
 
 ## License
 

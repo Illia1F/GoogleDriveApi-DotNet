@@ -11,8 +11,7 @@ This C# library simplifies interaction with the Google Drive API. While it doesn
 - Create/Delete folders in Google Drive.
 - Check if the access token is expired.
 - Refresh the access token if expired.
-- Download files from Google Drive.
-	For more detailed information, please refer to the following documents: [Downloading Files from Google Drive](DOCS/DownloadingFiles.md)
+- Download files from Google Drive. Docs: [Downloading Files from Google Drive](DOCS/DownloadingFiles.md)
 - Upload files to Google Drive. (Not yet)
 - Delete files and folders in Google Drive. (Not yet)
 
@@ -64,7 +63,7 @@ dotnet add package Google.Apis.Drive.v3
 1. Place the downloaded `credentials.json` file in your project directory.
 2. Initialize the `GoogleDriveApi` class with your credentials.
 
-## Example Code
+## Sample code snippets
 
 ### Creating an Instance of GoogleDriveApi
 
@@ -78,43 +77,7 @@ GoogleDriveApi gDriveApi = await GoogleDriveApi.CreateBuilder()
 	.BuildAsync();
 ```
 
-### Creating folders
-
-Create a new folder named "NewFolderName" in the root directory and then another folder named "NewFolderNameV2" inside the first folder.
-
-```csharp
-string newFolderId = gDriveApi.CreateFolder(folderName: "NewFolderName");
-
-string newFolderId2 = gDriveApi.CreateFolder(folderName: "NewFolderNameV2", parentFolderId: newFolderId);
-
-Console.WriteLine("New Folder ID: " + newFolderId);
-Console.WriteLine("New Folder ID2: " + newFolderId2);
-```
-
-### Retrieving a list of folders in the root directory
-
-Retrieve and print all folders in the root directory and their children.
-
-```csharp
-// Retrieves a list of folders in the root directory
-var folders = gDriveApi.GetFoldersBy(parentFolderId: "root");
-
-for (int i = 0; i < folders.Count; i++)
-{
-   var folder = folders[i];
-
-   Console.WriteLine($"{i + 1}. [{folder.name}] with ID({folder.id})");
-
-   // Retrieves a list of subfolders within the current folder
-   var subFolders = gDriveApi.GetFoldersBy(folder.id);
-   for (int j = 0; j < subFolders.Count; j++)
-   {
-      var subFolder = subFolders[j];
-
-      Console.WriteLine($"---|{j + 1}. [{subFolder.name}] with ID({subFolder.id})");
-   }
-}
-```
+Additional sample code snippets are available in the [Sample Code Snippets file](https://console.cloud.google.com/).
 
 ## License
 

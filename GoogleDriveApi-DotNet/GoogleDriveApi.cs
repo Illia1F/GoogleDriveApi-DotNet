@@ -9,6 +9,7 @@ namespace GoogleDriveApi_DotNet;
 
 public class GoogleDriveApi
 {
+    public const string RootFolderId = "root";
     private string _credentialsPath = "credentials.json";
     private string _tokenFolderPath = "_metadata";
     private string? _applicationName;
@@ -114,6 +115,25 @@ public class GoogleDriveApi
         }
     }
 
+    /// <inheritdoc cref="Internal_GetFolderIdByAsync"/>
+    public string? GetFolderIdBy(string folderName, string parentFolderId = RootFolderId)
+    {
+        TryRefreshToken();
+
+        return Internal_GetFolderIdByAsync(folderName, parentFolderId)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <inheritdoc cref="Internal_GetFolderIdByAsync"/>
+    public Task<string?> GetFolderIdByAsync(string folderName, string parentFolderId = RootFolderId)
+    {
+        TryRefreshToken();
+
+        return Internal_GetFolderIdByAsync(folderName, parentFolderId);
+    }
+
     /// <summary>
     /// Retrieves the ID of a folder by its name within a specified parent folder. 
     /// Default value  for <paramref name="parentFolderId"/> is "root".
@@ -121,18 +141,36 @@ public class GoogleDriveApi
     /// <param name="folderName">The name of the folder to search for.</param>
     /// <param name="parentFolderId">(optional) The ID of the parent folder to search within (default is "root").</param>
     /// <returns>The ID of the folder if found; otherwise, null.</returns>
-    public string? GetFolderIdBy(string folderName, string parentFolderId = "root")
+    private async Task<string?> Internal_GetFolderIdByAsync(string folderName, string parentFolderId)
     {
-        TryRefreshToken();
-
         var listRequest = Provider.Files.List();
         listRequest.Q = $"mimeType='application/vnd.google-apps.folder' and name='{folderName}' and '{parentFolderId}' in parents and trashed=false";
         listRequest.Fields = "files(id, name)";
         listRequest.PageSize = 1;
 
-        GoogleFile? file = listRequest.Execute().Files.FirstOrDefault();
+        var result = await listRequest.ExecuteAsync();
+        GoogleFile? file = result.Files.FirstOrDefault();
 
         return file?.Id;
+    }
+
+    /// <inheritdoc cref="Internal_GetFoldersByAsync"/>
+    public List<(string id, string name)> GetFoldersBy(string parentFolderId, int pageSize = 50)
+    {
+        TryRefreshToken();
+
+        return Internal_GetFoldersByAsync(parentFolderId, pageSize)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <inheritdoc cref="Internal_GetFoldersByAsync"/>
+    public Task<List<(string id, string name)>> GetFoldersByAsync(string parentFolderId, int pageSize = 50)
+    {
+        TryRefreshToken();
+
+        return Internal_GetFoldersByAsync(parentFolderId, pageSize);
     }
 
     /// <summary>
@@ -141,33 +179,51 @@ public class GoogleDriveApi
     /// <param name="parentFolderId">The ID of the parent folder to search within.</param>
     /// <param name="pageSize">(optional) The number of results to retrieve per page (default is 50).</param>
     /// <returns>A list of tuples, each containing the ID and name of a folder.</returns>
-    public List<(string id, string name)> GetFoldersBy(string parentFolderId, int pageSize = 50)
+    private async Task<List<(string id, string name)>> Internal_GetFoldersByAsync(string parentFolderId, int pageSize)
     {
-        TryRefreshToken();
-
         var allFolders = new List<GoogleFile>();
         string? pageToken = null;
-
+        string qSelector = $"mimeType='application/vnd.google-apps.folder' and '{parentFolderId}' in parents and trashed=false";
+        const string fields = "nextPageToken, files(id, name)";
         do
         {
             var listRequest = Provider.Files.List();
-            listRequest.Q = $"mimeType='application/vnd.google-apps.folder' and '{parentFolderId}' in parents and trashed=false";
-            listRequest.Fields = "nextPageToken, files(id, name)";
+            listRequest.Q = qSelector;
+            listRequest.Fields = fields;
             listRequest.PageSize = pageSize;
             listRequest.PageToken = pageToken;
 
-            var result = listRequest.Execute();
-            if (result.Files != null)
+            var result = await listRequest.ExecuteAsync();
+            if (result.Files is not null)
             {
                 allFolders.AddRange(result.Files);
             }
 
             pageToken = result.NextPageToken;
-        } while (pageToken != null);
+        } while (pageToken is not null);
 
         return allFolders
             .Select(f => (f.Id, f.Name))
             .ToList();
+    }
+
+    /// <inheritdoc cref="Internal_CreateFolderAsync"/>
+    public string CreateFolder(string folderName, string parentFolderId = RootFolderId)
+    {
+        TryRefreshToken();
+
+        return Internal_CreateFolderAsync(folderName, parentFolderId)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <inheritdoc cref="Internal_CreateFolderAsync"/>
+    public Task<string> CreateFolderAsync(string folderName, string parentFolderId = RootFolderId)
+    {
+        TryRefreshToken();
+
+        return Internal_CreateFolderAsync(folderName, parentFolderId);
     }
 
     /// <summary>
@@ -176,21 +232,38 @@ public class GoogleDriveApi
     /// <param name="folderName">The name of the folder to create.</param>
     /// <param name="parentFolderId">(optional) The ID of the parent folder where the new folder will be created (default is "root").</param>
     /// <returns>The ID of the created folder.</returns>
-    public string CreateFolder(string folderName, string parentFolderId = "root")
+    private async Task<string> Internal_CreateFolderAsync(string folderName, string parentFolderId)
     {
-        TryRefreshToken();
-
         var driveFolder = new GoogleFile()
         {
             Name = folderName,
             MimeType = "application/vnd.google-apps.folder",
-            Parents = new string[] { parentFolderId }
+            Parents = new [] { parentFolderId }
         };
 
         var request = Provider.Files.Create(driveFolder);
-        GoogleFile file = request.Execute();
+        GoogleFile file = await request.ExecuteAsync();
 
         return file.Id;
+    }
+
+    /// <inheritdoc cref="Internal_GetFileIdByAsync"/>
+    public string? GetFileIdBy(string fullFileName, string parentFolderId = RootFolderId)
+    {
+        TryRefreshToken();
+
+        return Internal_GetFileIdByAsync(fullFileName, parentFolderId)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <inheritdoc cref="Internal_GetFileIdByAsync"/>
+    public Task<string?> GetFileIdByAsync(string fullFileName, string parentFolderId = RootFolderId)
+    {
+        TryRefreshToken();
+
+        return Internal_GetFileIdByAsync(fullFileName, parentFolderId);
     }
 
     /// <summary>
@@ -200,16 +273,14 @@ public class GoogleDriveApi
     /// <param name="parentFolderId">The ID of the parent folder where the file is located. Use "root" for the root directory.</param>
     /// <returns>The file ID if found, otherwise null.</returns>
     /// <exception cref="InvalidOperationException">Thrown if the GoogleDriveApi is not initialized and authorized.</exception>
-    public string? GetFileIdBy(string fullFileName, string parentFolderId = "root")
+    private async Task<string?> Internal_GetFileIdByAsync(string fullFileName, string parentFolderId)
     {
-        TryRefreshToken();
-
         var request = Provider.Files.List();
         request.Q = $"name = '{fullFileName}' and '{parentFolderId}' in parents and trashed = false";
         request.Fields = "files(id, name)";
         request.PageSize = 1;
 
-        var result = request.Execute();
+        var result = await request.ExecuteAsync();
         var file = result.Files.FirstOrDefault();
 
         return file?.Id;
@@ -263,6 +334,12 @@ public class GoogleDriveApi
         }
     }
 
+    /// <summary>
+    /// Exports a Google-specific file (like Google Docs, Sheets, Slides) to a specified MIME type.
+    /// </summary>
+    /// <param name="fileId">The ID of the file to export.</param>
+    /// <param name="exportMimeType">The MIME type to which the file should be exported.</param>
+    /// <param name="fullFilePath">The full path where the exported file will be saved.</param>
     private async Task ExportGoogleFileAsync(string fileId, string exportMimeType, string fullFilePath)
     {
         var request = Provider.Files.Export(fileId, exportMimeType);
@@ -289,6 +366,11 @@ public class GoogleDriveApi
         await request.DownloadAsync(streamFile);
     }
 
+    /// <summary>
+    /// Downloads a binary file from Google Drive.
+    /// </summary>
+    /// <param name="fileId">The ID of the file to download.</param>
+    /// <param name="fullFilePath">The full path where the downloaded file will be saved.</param>
     private async Task DownloadBinaryFileAsync(string fileId, string fullFilePath)
     {
         var request = Provider.Files.Get(fileId);

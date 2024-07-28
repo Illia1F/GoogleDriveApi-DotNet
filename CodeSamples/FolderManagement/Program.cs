@@ -63,3 +63,31 @@ Console.WriteLine(new string('-', 50));
         }
     }
 }
+
+Console.WriteLine(new string('-', 50));
+
+/*
+ * Deletes the Test Folder
+ */
+{
+    try
+    {
+        string? folderId = gDriveApi.GetFolderIdBy("Test Folder");
+        if (folderId is null)
+        {
+            Console.WriteLine("Cannot find the Test Folder.");
+        }
+        else if (gDriveApi.DeleteFolder(folderId))
+        {
+            Console.WriteLine("Test Folder has been deleted =)");
+        }
+        else
+        {
+            Console.WriteLine("Sth went wrong :(");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+}

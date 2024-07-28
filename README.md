@@ -8,7 +8,7 @@ This C# library simplifies interaction with the Google Drive API. While it doesn
 - Get the folder name by its ID.
 - Generate Google Drive folder URL by its id.
 - Obtain the full path of a folder starting from the root using its ID. (Very slowly)
-- Create folders in Google Drive.
+- Create/Delete folders in Google Drive.
 - Check if the access token is expired.
 - Refresh the access token if expired.
 - Download files from Google Drive.

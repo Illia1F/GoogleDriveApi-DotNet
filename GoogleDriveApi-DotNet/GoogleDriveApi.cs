@@ -3,12 +3,15 @@ using Google.Apis.Download;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
 using Google.Apis.Util.Store;
+using GoogleDriveApi_DotNet.Exceptions;
 using GoogleDriveApi_DotNet.Helpers;
+using System.Diagnostics;
 
 namespace GoogleDriveApi_DotNet;
 
 public class GoogleDriveApi
 {
+    public const int AuthorizationTimeOutInSec = 30;
     public const string RootFolderId = "root";
     private readonly string _credentialsPath;
     private readonly string _tokenFolderPath;
@@ -16,7 +19,8 @@ public class GoogleDriveApi
     private DriveService? _service;
     private UserCredential? _credential;
 
-    public DriveService Provider => _service ?? throw new InvalidOperationException("The GoogleDriveApi is not initialized and authorized.");
+    public DriveService Provider => _service ?? throw new AuthorizationException("The GoogleDriveApi has not been authorized.");
+    public bool IsAuthorized => _service is not null;
     public bool IsTokenShouldBeRefreshed => _credential?.Token?.IsStale ?? false;
 
     private GoogleDriveApi(string credentialsPath, string tokenFolderPath, string applicationName)
@@ -72,46 +76,77 @@ public class GoogleDriveApi
         }
 
         ///<inheritdoc cref="Internal_BuildAsync"/>
-        public GoogleDriveApi Build()
+        public GoogleDriveApi Build(bool immediateAuthorization = true, int timeOutInSec = AuthorizationTimeOutInSec)
         {
-            return Internal_BuildAsync()
+            return Internal_BuildAsync(immediateAuthorization, timeOutInSec)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
         }
 
         ///<inheritdoc cref="Internal_BuildAsync"/>
-        public Task<GoogleDriveApi> BuildAsync()
+        public async Task<GoogleDriveApi> BuildAsync(bool immediateAuthorization = true, int timeOutInSec = AuthorizationTimeOutInSec)
         {
-            return Internal_BuildAsync();
+            return await Internal_BuildAsync(immediateAuthorization, timeOutInSec)
+                .ConfigureAwait(false);
         }
 
         /// <summary>
-        /// Builds and authorizes the GoogleDriveApi instance asynchronously.
+        /// Builds the GoogleDriveApi instance and attempts to authorize if <paramref name="immediateAuthorization"/> is true within <paramref name="timeOutInSec"/> seconds. 
         /// <para>Documentation: https://cloud.google.com/dotnet/docs/reference/Google.Apis/latest/Google.Apis.Auth.OAuth2.GoogleWebAuthorizationBroker?hl=en#Google_Apis_Auth_OAuth2_GoogleWebAuthorizationBroker_AuthorizeAsync_Google_Apis_Auth_OAuth2_ClientSecrets_System_Collections_Generic_IEnumerable_System_String__System_String_System_Threading_CancellationToken_Google_Apis_Util_Store_IDataStore_Google_Apis_Auth_OAuth2_ICodeReceiver_</para>
         /// </summary>
         /// <returns>A task representing the asynchronous operation. The result contains the authorized GoogleDriveApi instance.</returns>
-        private async Task<GoogleDriveApi> Internal_BuildAsync()
+        /// <inheritdoc cref="Internal_AuthorizeAsync"/>
+        private async Task<GoogleDriveApi> Internal_BuildAsync(bool immediateAuthorization, int timeOutInSec)
         {
             var gDriveApi = new GoogleDriveApi(_credentialsPath, _tokenFolderPath, _applicationName);
 
-            await gDriveApi
-                .AuthorizeAsync()
-                .ConfigureAwait(false);
+            if (immediateAuthorization)
+            {
+                await gDriveApi.Internal_AuthorizeAsync(timeOutInSec)
+                    .ConfigureAwait(false);
+            }
 
             return gDriveApi;
         }
     }
 
-    private async Task AuthorizeAsync()
+    /// <inheritdoc cref="Internal_AuthorizeAsync"/>
+    public void Authorize(int timeOutInSec = AuthorizationTimeOutInSec)
     {
+        Internal_AuthorizeAsync(timeOutInSec)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <inheritdoc cref="Internal_AuthorizeAsync"/>
+    public async Task AuthorizeAsync(int timeOutInSec = AuthorizationTimeOutInSec)
+    {
+        await Internal_AuthorizeAsync(timeOutInSec)
+            .ConfigureAwait(false);
+    }
+
+    ///<summary>
+    /// Authorizes the user in Google Drive.
+    /// </summary>
+    /// <exception cref="OperationCanceledException">Thrown if the authorization process times out.</exception>
+    private async Task Internal_AuthorizeAsync(int timeOutInSec)
+    {
+        if (IsAuthorized)
+        {
+            throw new AuthorizationException("The GoogleDriveApi has been already authorized.");
+        }
+
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeOutInSec));
+
         using (var stream = new FileStream(_credentialsPath, FileMode.Open, FileAccess.Read))
         {
             _credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
                 GoogleClientSecrets.FromStream(stream).Secrets,
                 new[] { DriveService.Scope.Drive },
                 "user",
-                CancellationToken.None,
+                cts.Token,
                 new FileDataStore(_tokenFolderPath, true))
                 .ConfigureAwait(false);
         }
@@ -151,7 +186,7 @@ public class GoogleDriveApi
 
             return true;
         }
-        
+
         return false;
     }
 
@@ -184,8 +219,8 @@ public class GoogleDriveApi
     /// <returns>The ID of the folder if found; otherwise, null.</returns>
     private async Task<string?> Internal_GetFolderIdByAsync(string folderName, string parentFolderId)
     {
-        ArgumentNullException.ThrowIfNull(folderName);
-        ArgumentNullException.ThrowIfNull(parentFolderId);
+        ArgumentNullException.ThrowIfNullOrEmpty(folderName);
+        ArgumentNullException.ThrowIfNullOrEmpty(parentFolderId);
 
         var listRequest = Provider.Files.List();
         listRequest.Q = $"mimeType='application/vnd.google-apps.folder' and name='{folderName}' and '{parentFolderId}' in parents and trashed=false";
@@ -226,7 +261,12 @@ public class GoogleDriveApi
     /// <returns>A list of tuples, each containing the ID and name of a folder.</returns>
     private async Task<List<(string id, string name)>> Internal_GetFoldersByAsync(string parentFolderId, int pageSize)
     {
-        ArgumentNullException.ThrowIfNull(parentFolderId);
+        ArgumentNullException.ThrowIfNullOrEmpty(parentFolderId);
+
+        if (pageSize <= 0)
+        {
+            throw new ArgumentException("PageSize cannot be smaller than 1.");
+        }
 
         var allFolders = new List<GoogleFile>();
         string? pageToken = null;
@@ -282,14 +322,14 @@ public class GoogleDriveApi
     /// <returns>The ID of the created folder.</returns>
     private async Task<string> Internal_CreateFolderAsync(string folderName, string parentFolderId)
     {
-        ArgumentNullException.ThrowIfNull(folderName);
-        ArgumentNullException.ThrowIfNull(parentFolderId);
+        ArgumentNullException.ThrowIfNullOrEmpty(folderName);
+        ArgumentNullException.ThrowIfNullOrEmpty(parentFolderId);
 
         var driveFolder = new GoogleFile()
         {
             Name = folderName,
             MimeType = "application/vnd.google-apps.folder",
-            Parents = new [] { parentFolderId }
+            Parents = new[] { parentFolderId }
         };
 
         var request = Provider.Files.Create(driveFolder);
@@ -323,7 +363,7 @@ public class GoogleDriveApi
     /// <returns> The task result is a boolean indicating success or failure.</returns>
     private async Task<bool> Internal_DeleteFolderAsync(string folderId)
     {
-        ArgumentNullException.ThrowIfNull(folderId);
+        ArgumentNullException.ThrowIfNullOrEmpty(folderId);
 
         GoogleFile folder = await Provider.Files.Get(folderId).ExecuteAsync().ConfigureAwait(false);
         if (folder.MimeType != "application/vnd.google-apps.folder")
@@ -363,11 +403,11 @@ public class GoogleDriveApi
     /// <param name="fullFileName">The name of the file with an extension to search for.</param>
     /// <param name="parentFolderId">The ID of the parent folder where the file is located. Use "root" for the root directory.</param>
     /// <returns>The file ID if found, otherwise null.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the GoogleDriveApi is not initialized and authorized.</exception>
+    /// <exception cref="AuthorizationException">Thrown if the GoogleDriveApi is not initialized and authorized.</exception>
     private async Task<string?> Internal_GetFileIdByAsync(string fullFileName, string parentFolderId)
     {
-        ArgumentNullException.ThrowIfNull(fullFileName);
-        ArgumentNullException.ThrowIfNull(parentFolderId);
+        ArgumentNullException.ThrowIfNullOrEmpty(fullFileName);
+        ArgumentNullException.ThrowIfNullOrEmpty(parentFolderId);
 
         var request = Provider.Files.List();
         request.Q = $"name = '{fullFileName}' and '{parentFolderId}' in parents and trashed = false";
@@ -381,16 +421,84 @@ public class GoogleDriveApi
     }
 
     /// <summary>
+    /// Uploads a file to Google Drive using a file path.
+    /// </summary>
+    /// <param name="filePath">The path of the file to be uploaded.</param>
+    /// <param name="mimeType">The MIME type of the file.</param>
+    public string UploadFilePath(string filePath, string mimeType)
+    {
+        ArgumentNullException.ThrowIfNullOrEmpty(filePath);
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Cannot find the file at {filePath}.");
+        }
+
+        string fileName = Path.GetFileName(filePath);
+        using var stream = new FileStream(filePath, FileMode.Open);
+
+        return Internal_UploadFileStream(stream, fileName, mimeType);
+    }
+
+    /// <inheritdoc cref="Internal_UploadFileStream"/>
+    public string UploadFileStream(Stream fileStream, string fileName, string mimeType)
+    {
+        return Internal_UploadFileStream(fileStream, fileName, mimeType);
+    }
+
+    /// <summary>
+    /// Uploads a file to Google Drive using a Stream.
+    /// </summary>
+    /// <param name="fileStream">The file stream to be uploaded.</param>
+    /// <param name="fileName">The name of the file on Google Drive.</param>
+    /// <param name="mimeType">The MIME type of the file.</param>
+    /// <exception cref="CreateMediaUploadException">Thrown if the file upload failed.</exception>
+    public string Internal_UploadFileStream(Stream fileStream, string fileName, string mimeType)
+    {
+        ArgumentNullException.ThrowIfNullOrEmpty(fileName);
+        ArgumentNullException.ThrowIfNullOrEmpty(mimeType);
+
+        var fileMetadata = new GoogleFile()
+        {
+            Name = fileName
+        };
+
+        FilesResource.CreateMediaUpload request =
+            Provider.Files.Create(fileMetadata, fileStream, mimeType);
+
+        request.Fields = "id";
+
+        var uploadProgress = request.Upload();
+
+        if (uploadProgress.Status == Google.Apis.Upload.UploadStatus.Failed)
+        {
+            Debug.WriteLine("File upload failed.");
+            throw new CreateMediaUploadException("File upload failed", uploadProgress.Exception);
+        }
+
+        GoogleFile file = request.ResponseBody;
+
+        if (file is null)
+        {
+            Debug.WriteLine("File upload failed, no response body received.");
+            throw new CreateMediaUploadException("File upload failed, no response body received.");
+        }
+
+        return file.Id;
+    }
+
+    /// <summary>
     /// Downloads a file from Google Drive by its file ID.
     /// </summary>
     /// <param name="fileId">The ID of the file to download.</param>
     /// <param name="saveToPath">The local path where the file will be saved.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the GoogleDriveApi is not initialized and authorized.</exception>
+    /// <exception cref="AuthorizationException">Thrown if the GoogleDriveApi is not initialized and authorized.</exception>
+    /// <inheritdoc cref="ExportGoogleFileAsync"/>
+    /// <inheritdoc cref="DownloadBinaryFileAsync"/>
     public async Task DownloadFileAsync(string fileId, string saveToPath = "Downloads")
     {
-        ArgumentNullException.ThrowIfNull(fileId);
-        ArgumentNullException.ThrowIfNull(saveToPath);
+        ArgumentNullException.ThrowIfNullOrEmpty(fileId);
+        ArgumentNullException.ThrowIfNullOrEmpty(saveToPath);
 
         await TryRefreshTokenAsync().ConfigureAwait(false);
 
@@ -437,6 +545,7 @@ public class GoogleDriveApi
     /// <param name="fileId">The ID of the file to export.</param>
     /// <param name="exportMimeType">The MIME type to which the file should be exported.</param>
     /// <param name="fullFilePath">The full path where the exported file will be saved.</param>
+    /// <exception cref="ExportRequestException">Thrown if the export failed.</exception>
     private async Task ExportGoogleFileAsync(string fileId, string exportMimeType, string fullFilePath)
     {
         var request = Provider.Files.Export(fileId, exportMimeType);
@@ -447,16 +556,15 @@ public class GoogleDriveApi
             switch (progress.Status)
             {
                 case DownloadStatus.Downloading:
-                    Console.WriteLine(progress.BytesDownloaded);
+                    Debug.WriteLine($"BytesDownloaded: {progress.BytesDownloaded}");
                     break;
                 case DownloadStatus.Completed:
-                    Console.WriteLine("Export complete.");
                     SaveStream(streamFile, fullFilePath);
+                    Debug.WriteLine("Export complete.");
                     break;
                 case DownloadStatus.Failed:
-                    Console.WriteLine("Export failed.");
-                    Console.WriteLine($"Error: {progress.Exception.Message}");
-                    break;
+                    Debug.WriteLine("Export failed.");
+                    throw new ExportRequestException("Failed to export the file from Google Drive.", progress.Exception);
             }
         };
 
@@ -468,6 +576,7 @@ public class GoogleDriveApi
     /// </summary>
     /// <param name="fileId">The ID of the file to download.</param>
     /// <param name="fullFilePath">The full path where the downloaded file will be saved.</param>
+    /// <exception cref="GetRequestException">Thrown if the downloading failed.</exception>
     private async Task DownloadBinaryFileAsync(string fileId, string fullFilePath)
     {
         var request = Provider.Files.Get(fileId);
@@ -478,16 +587,15 @@ public class GoogleDriveApi
             switch (progress.Status)
             {
                 case DownloadStatus.Downloading:
-                    Console.WriteLine(progress.BytesDownloaded);
+                    Debug.WriteLine($"BytesDownloaded: {progress.BytesDownloaded}");
                     break;
                 case DownloadStatus.Completed:
-                    Console.WriteLine("Download complete.");
                     SaveStream(streamFile, fullFilePath);
+                    Debug.WriteLine("Download complete.");
                     break;
                 case DownloadStatus.Failed:
-                    Console.WriteLine("Download failed.");
-                    Console.WriteLine($"Error: {progress.Exception.Message}");
-                    break;
+                    Debug.WriteLine("Download failed.");
+                    throw new GetRequestException("Failed to download the file from Google Drive.", progress.Exception);
             }
         };
 

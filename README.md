@@ -12,7 +12,7 @@ This C# library simplifies interaction with the Google Drive API. While it doesn
 - Check if the access token is expired.
 - Refresh the access token if expired.
 - Download files from Google Drive. Docs: [Downloading Files from Google Drive](DOCS/DownloadingFiles.md)
-- Upload files to Google Drive. (Not yet)
+- Upload files to Google Drive.
 - Delete files and folders in Google Drive. (Not yet)
 
 > **Note:** This library is not a full reflection of the real Google Drive API but implements the most commonly used API endpoints to simplify interaction with Google Drive.

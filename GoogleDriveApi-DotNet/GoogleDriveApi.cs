@@ -452,7 +452,7 @@ public class GoogleDriveApi
     /// <param name="fileName">The name of the file on Google Drive.</param>
     /// <param name="mimeType">The MIME type of the file.</param>
     /// <exception cref="CreateMediaUploadException">Thrown if the file upload failed.</exception>
-    public string Internal_UploadFileStream(Stream fileStream, string fileName, string mimeType)
+    private string Internal_UploadFileStream(Stream fileStream, string fileName, string mimeType)
     {
         ArgumentNullException.ThrowIfNullOrEmpty(fileName);
         ArgumentNullException.ThrowIfNullOrEmpty(mimeType);

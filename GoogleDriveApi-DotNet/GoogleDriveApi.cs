@@ -5,6 +5,7 @@ using Google.Apis.Services;
 using Google.Apis.Util.Store;
 using GoogleDriveApi_DotNet.Exceptions;
 using GoogleDriveApi_DotNet.Helpers;
+using GoogleDriveApi_DotNet.Models;
 using System.Diagnostics;
 
 namespace GoogleDriveApi_DotNet;
@@ -292,6 +293,47 @@ public class GoogleDriveApi
         return allFolders
             .Select(f => (f.Id, f.Name))
             .ToList();
+    }
+
+    /// <inheritdoc cref="Internal_GetAllFoldersAsync"/>
+    public List<GDriveFile> GetAllFolders()
+    {
+        return Internal_GetAllFoldersAsync()
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <inheritdoc cref="Internal_GetAllFoldersAsync"/>
+    public async Task<List<GDriveFile>> GetAllFoldersAsync()
+    {
+        return await Internal_GetAllFoldersAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Retrieves all folders from Google Drive.
+    /// This method sends multiple requests to ensure all folders are retrieved, with each request
+    /// fetching up to 1000 folders (the maximum page size).
+    /// </summary>
+    /// <returns>A list of GDriveFile objects representing all folders in the Google Drive.</returns>
+    private async Task<List<GDriveFile>> Internal_GetAllFoldersAsync()
+    {
+        var request = Provider.Files.List();
+        request.Q = "mimeType = 'application/vnd.google-apps.folder'";
+        request.Fields = "nextPageToken, files(id, name, parents)";
+        request.PageSize = 1000; // Set page size to maximum (1000)
+
+        var folders = new List<GoogleFile>();
+        do
+        {
+            var result = await request.ExecuteAsync().ConfigureAwait(false);
+            folders.AddRange(result.Files);
+            request.PageToken = result.NextPageToken;
+        } while (!string.IsNullOrEmpty(request.PageToken));
+
+        var driveFolders = folders.Select(f => f.ToGDriveFile()).ToList();
+
+        return driveFolders;
     }
 
     /// <inheritdoc cref="Internal_CreateFolderAsync"/>
